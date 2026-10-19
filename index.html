@@ -1196,19 +1196,23 @@ return null;
 function fetchRemoteDB() {
 return new Promise(function (resolve) {
 var done = false;
-var timer = setTimeout(function () {
+var timer = null;
+function armTimeout(ms) {
+timer = setTimeout(function () {
 if (done) return;
 done = true;
 resolve({ ok: false, db: null });
-}, 1500);
+}, ms);
+}
 function finish(v) {
 if (done) return;
 done = true;
-clearTimeout(timer);
+if (timer) clearTimeout(timer);
 resolve(v);
 }
 ensureCloudConfig().then(function (cloud) {
 if (cloud) {
+armTimeout(8000);
 cloudFetch('GET').then(function (res) {
 if (res.ok) {
 finish({ ok: true, db: res.db, cloud: true });
@@ -1218,6 +1222,7 @@ finish({ ok: false, db: null, cloudError: res.error });
 });
 return;
 }
+armTimeout(1500);
 fetch('/api/health', { cache: 'no-store' })
 .then(function (r) {
 if (!r.ok) throw new Error('no-api');
