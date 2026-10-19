@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>速勤 · 班级考勤工作台</title>
+<meta name="description" content="速勤：面向班主任的班级考勤工作台。点击 / 拖选 / 键盘三种方式标记，自动统计出勤率，一键导出 Excel。">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<div class="app" id="app">
+
+  <!-- 顶栏 -->
+  <header class="topbar">
+    <a class="brand" href="#" id="brand" title="速勤 · 班级考勤工作台">
+      <span class="brand-mark">速</span>
+      <span class="brand-text">
+        <b>速勤</b>
+        <i>班级考勤工作台</i>
+      </span>
+    </a>
+
+    <div class="search" id="search">
+      <span class="search-ico" id="searchIco"></span>
+      <input id="searchInput" type="search" placeholder="搜索学生 / 拼音首字母，如 王梓涵 或 wzh" autocomplete="off" spellcheck="false">
+      <div class="search-results" id="searchResults" hidden></div>
+    </div>
+
+    <nav class="top-actions">
+      <button class="btn btn-ghost" id="btnRoll" title="点名模式（Ctrl+Enter）">
+        <span class="ico" data-ico="check"></span><span class="lbl">点名</span>
+      </button>
+      <button class="btn btn-ghost" id="btnStats" title="统计视图">
+        <span class="ico" data-ico="chart"></span><span class="lbl">统计</span>
+      </button>
+      <button class="btn btn-ghost" id="btnExport" title="导出 / 备份">
+        <span class="ico" data-ico="download"></span><span class="lbl">导出</span>
+      </button>
+      <button class="btn btn-primary" id="btnImport" title="导入名单或考勤">
+        <span class="ico" data-ico="upload"></span><span class="lbl">导入</span>
+      </button>
+      <span class="top-sep"></span>
+      <button class="btn btn-icon" id="btnTheme" title="切换深浅色">
+        <span class="ico" data-ico="moon"></span>
+      </button>
+      <button class="btn btn-icon" id="btnSettings" title="设置">
+        <span class="ico" data-ico="gear"></span>
+      </button>
+    </nav>
+  </header>
+
+  <div class="shell">
+
+    <!-- 左栏：班级 / 小组 / 本周概览 -->
+    <aside class="sidebar">
+      <div class="side-block">
+        <div class="side-head"><span>班级</span></div>
+        <div class="side-list" id="classTabs"></div>
+      </div>
+
+      <div class="side-block">
+        <div class="side-head"><span>小组</span></div>
+        <div class="side-grid" id="groupTabs"></div>
+      </div>
+
+      <div class="side-block side-summary" id="sideSummary"></div>
+
+      <div class="side-foot">
+        <span class="save-state" id="saveState"><i></i>已保存</span>
+      </div>
+    </aside>
+
+    <main class="main">
+
+      <!-- 表格视图 -->
+      <section class="view" id="viewGrid">
+        <div class="toolbar">
+          <div class="week-nav">
+            <button class="btn btn-icon btn-sm" id="weekPrev" title="上一周（Alt+←）"><span class="ico" data-ico="left"></span></button>
+            <button class="week-jump" id="weekJump" title="回到本周">
+              <b id="weekLabel">第 1 周</b>
+              <span id="weekRange">—</span>
+            </button>
+            <button class="btn btn-icon btn-sm" id="weekNext" title="下一周（Alt+→）"><span class="ico" data-ico="right"></span></button>
+            <button class="btn btn-sm btn-soft" id="weekToday">本周</button>
+          </div>
+
+          <div class="toolbar-sep"></div>
+
+          <div class="palette" id="palette">
+            <span class="palette-lbl">标注</span>
+            <div class="palette-items" id="paletteItems"></div>
+          </div>
+
+          <div class="toolbar-right">
+            <button class="btn btn-sm btn-ghost" id="btnUndo" title="撤销（Ctrl+Z）"><span class="ico" data-ico="undo"></span>撤销</button>
+            <button class="btn btn-sm btn-ghost" id="btnRedo" title="重做（Ctrl+Shift+Z）"><span class="ico" data-ico="redo"></span></button>
+            <button class="btn btn-icon btn-ghost" id="btnHelp" title="快捷键与说明">?</button>
+          </div>
+        </div>
+
+        <div class="demo-banner" id="demoBanner" hidden>
+          <span>这是一份<b>示例数据</b>，随便点、随便改，熟悉后再清空建自己的班。</span>
+          <button class="btn btn-xs btn-soft" id="btnClearDemo">清空示例，开始建班</button>
+        </div>
+
+        <div class="grid-shell">
+          <div class="grid-wrap" id="gridWrap">
+            <table class="grid" id="grid"></table>
+          </div>
+          <div class="grid-empty" id="gridEmpty" hidden></div>
+        </div>
+
+        <div class="hintbar" id="hintbar">
+          <span><kbd>单击</kbd> 标记面板</span>
+          <span><kbd>拖选</kbd> 批量标记</span>
+          <span><kbd>1</kbd>–<kbd>6</kbd> 快捷键</span>
+          <span><kbd>Ctrl</kbd>+<kbd>Z</kbd> 撤销</span>
+          <span class="hintbar-right" id="storageNote">数据保存在本机服务器</span>
+        </div>
+      </section>
+
+      <!-- 统计视图 -->
+      <section class="view view-stats" id="viewStats" hidden></section>
+
+    </main>
+  </div>
+</div>
+
+<!-- 浮层 -->
+<div class="pop-layer" id="popLayer"></div>
+<div class="modal-layer" id="modalLayer"></div>
+<div class="toast-layer" id="toastLayer"></div>
+
+<script src="pinyin.js"></script>
+<script src="core.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
