@@ -84,20 +84,24 @@
   function fetchRemoteDB() {
     return new Promise(function (resolve) {
       var done = false;
-      var timer = setTimeout(function () {
-        if (done) return;
-        done = true;
-        resolve({ ok: false, db: null });
-      }, 1500);
+      var timer = null;
+      function armTimeout(ms) {
+        timer = setTimeout(function () {
+          if (done) return;
+          done = true;
+          resolve({ ok: false, db: null });
+        }, ms);
+      }
       function finish(v) {
         if (done) return;
         done = true;
-        clearTimeout(timer);
+        if (timer) clearTimeout(timer);
         resolve(v);
       }
-      // 优先看本地配置的 Supabase 云端（静态托管时唯一可用的共享通道）
+      // 优先看云端配置（内置默认 / 本地 / 服务器注入）；云端路径网络可能慢，给足 8s
       ensureCloudConfig().then(function (cloud) {
         if (cloud) {
+          armTimeout(8000);
           cloudFetch('GET').then(function (res) {
             if (res.ok) {
               finish({ ok: true, db: res.db, cloud: true });
@@ -109,6 +113,7 @@
           return;
         }
         // 用 /api/health 判断是不是速勤的服务端，避免把普通静态服务器的 404 当成可用
+        armTimeout(1500);
         fetch('/api/health', { cache: 'no-store' })
           .then(function (r) {
             if (!r.ok) throw new Error('no-api');
@@ -153,18 +158,30 @@
   }
 
   var cloudCfgPromise = null;
+  // 内置默认云端：让所有打开本页的设备零配置自动共享同一份数据。
+  // anon key 本就是设计为公开的（RLS 只放行 attendance_state 一行），放前端是 Supabase 官方用法。
+  var DEFAULT_CLOUD = {
+    url: 'https://qcvefxutsncfbhfnrczh.supabase.co',
+    key: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFjdmVmeHV0c25jZmJoZm5yY3poIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA0MTc4MTcsImV4cCI6MjA5NTk5MzgxN30.pjdqBGfpxR4IVSjSRf8dnMicndErvrEMK-pRY7gUQkU'
+  };
   function ensureCloudConfig() {
-    // 页面由速勤 server 托管时，可以让 /api/config 注入默认云端（部署成共享站更省事）
+    // 优先本地配置（设置里可覆盖）→ 服务器注入 → GitHub Pages 托管时用内置默认云端。
+    // 门控：仅 github.io 托管才默认云端，保证本机服务器版 / file:// 离线版行为不变。
     if (!cloudCfgPromise) {
       cloudCfgPromise = new Promise(function (resolve) {
         var saved = cloudConfig();
         if (saved) return resolve(saved);
+        var isPages = /\.github\.io$/.test(location.hostname) || location.hostname === 'github.io';
+        var finish = function (cfg) {
+          if (cfg) saveCloudConfig(cfg);
+          resolve(cfg);
+        };
+        if (location.protocol === 'file:') return resolve(null);
+        if (isPages) return finish(DEFAULT_CLOUD);
         fetch('/api/config', { cache: 'no-store' })
           .then(function (r) { return r.ok ? r.json() : null; })
           .then(function (j) {
-            var cfg = j && j.supabase && j.supabase.url && j.supabase.key ? j.supabase : null;
-            if (cfg) saveCloudConfig(cfg);
-            resolve(cfg);
+            finish(j && j.supabase && j.supabase.url && j.supabase.key ? j.supabase : null);
           })
           .catch(function () { resolve(null); });
       });
@@ -225,7 +242,7 @@
     var t = {
       cloud: '数据保存在 Supabase 云端，所有打开此页面的人共享',
       server: '数据保存在本机服务器 data/db.json，可用局域网访问',
-      local: '数据保存在本机浏览器，不会上传'
+      local: '数据保存在本机浏览器，不会上传（仅当云端连接失败时出现）'
     };
     el.textContent = t[state.mode] || t.local;
   }
@@ -1775,21 +1792,31 @@
   function setShare() {
     var cfg = cloudConfig();
     var modeName = { cloud: 'Supabase 云端', server: '本机服务器', local: '本机浏览器' }[state.mode] || state.mode;
-    return '<div class="note" style="margin-bottom:12px">连接 Supabase 后，所有打开此页面的人读写同一份数据，' +
-      '任何设备改动会在 15 秒内自动同步到其他设备。当前存储：<b>' + esc(modeName) + '</b>。</div>' +
-      '<div class="field"><label>Supabase 项目地址</label>' +
-      '<input class="input" id="cloudUrl" placeholder="https://xxxx.supabase.co" value="' + esc(cfg ? cfg.url : '') + '">' +
-      '<div class="desc">Supabase 控制台 → Project Settings → API → Project URL</div></div>' +
-      '<div class="field"><label>anon 公开密钥</label>' +
-      '<textarea class="input" id="cloudKey" style="min-height:84px" placeholder="eyJhbGciOi…（anon public key）">' + esc(cfg ? cfg.key : '') + '</textarea>' +
-      '<div class="desc">Project Settings → API → Project API Keys → anon public。只给 anon 权限，不要用 service_role。</div></div>' +
-      '<div class="inline" style="margin-top:4px">' +
-      '<button class="btn btn-primary" id="cloudSave">连接并启用云端</button>' +
-      '<button class="btn btn-outline" id="cloudTest">测试连接</button>' +
-      (cfg ? '<button class="btn btn-danger" id="cloudOff">断开云端</button>' : '') +
-      '</div><div id="cloudMsg" class="desc" style="margin-top:10px"></div>' +
-      '<div class="note" style="margin-top:14px"><b>首次使用：</b>在 Supabase 的 SQL Editor 里执行下面这条建表语句（设置 → 云端共享 页也可复制）：<br>' +
-      '<code style="display:block;margin-top:8px;padding:10px;background:var(--bg-2);border-radius:8px;white-space:pre-wrap;font-size:11.5px">create table if not exists attendance_state (\n  id int primary key,\n  data jsonb not null,\n  updated_at timestamptz not null default now()\n);\nalter table attendance_state enable row level security;\ncreate policy "attend all" on attendance_state\n  for all to anon using (true) with check (true);</code></div>';
+    return '<div class="note" style="margin-bottom:12px">本页已<b>内置云端自动同步</b>：所有打开此页面的人读写同一份数据，' +
+      '任何设备改动会在 15 秒内自动同步到其他设备，无需任何设置。当前存储：<b>' + esc(modeName) + '</b>。</div>' +
+      (cfg && (cfg.url !== DEFAULT_CLOUD.url || cfg.key !== DEFAULT_CLOUD.key)
+        ? '<div class="field"><label>Supabase 项目地址</label>' +
+          '<input class="input" id="cloudUrl" placeholder="https://xxxx.supabase.co" value="' + esc(cfg.url) + '">' +
+          '<div class="desc">Supabase 控制台 → Project Settings → API → Project URL</div></div>' +
+          '<div class="field"><label>anon 公开密钥</label>' +
+          '<textarea class="input" id="cloudKey" style="min-height:84px">' + esc(cfg.key) + '</textarea>' +
+          '<div class="desc">Project Settings → API → Project API Keys → anon public。只给 anon 权限，不要用 service_role。</div></div>' +
+          '<div class="inline" style="margin-top:4px">' +
+          '<button class="btn btn-primary" id="cloudSave">保存自定义云端</button>' +
+          '<button class="btn btn-outline" id="cloudTest">测试连接</button>' +
+          '<button class="btn btn-danger" id="cloudOff">恢复默认云端</button>' +
+          '</div><div id="cloudMsg" class="desc" style="margin-top:10px"></div>' +
+          '<div class="note" style="margin-top:14px"><b>自建云端：</b>在 Supabase 的 SQL Editor 里执行下面这条建表语句：<br>' +
+          '<code style="display:block;margin-top:8px;padding:10px;background:var(--bg-2);border-radius:8px;white-space:pre-wrap;font-size:11.5px">create table if not exists attendance_state (\n  id int primary key,\n  data jsonb not null,\n  updated_at timestamptz not null default now()\n);\nalter table attendance_state enable row level security;\ncreate policy "attend all" on attendance_state\n  for all to anon using (true) with check (true);</code></div>'
+        : '<div class="desc" style="margin-top:6px">如需换成自己的 Supabase 项目，先在下方粘贴配置。</div>' +
+          '<div class="field"><label>Supabase 项目地址</label>' +
+          '<input class="input" id="cloudUrl" placeholder="https://xxxx.supabase.co"></div>' +
+          '<div class="field"><label>anon 公开密钥</label>' +
+          '<textarea class="input" id="cloudKey" style="min-height:84px" placeholder="eyJhbGciOi…（anon public key）"></textarea></div>' +
+          '<div class="inline" style="margin-top:4px">' +
+          '<button class="btn btn-primary" id="cloudSave">使用我的云端</button>' +
+          '<button class="btn btn-outline" id="cloudTest">测试连接</button>' +
+          '</div><div id="cloudMsg" class="desc" style="margin-top:10px"></div>');
   }
 
   function setOrg() {
@@ -2024,11 +2051,11 @@
       };
       var off = $('#cloudOff', root);
       if (off) off.onclick = function () {
-        confirmBox('断开云端？', '之后数据只保存在本机浏览器。云端数据不会被删除。', function () {
+        confirmBox('恢复默认云端？', '将清除自定义 Supabase 配置，回到页面内置的云端共享。', function () {
           saveCloudConfig(null);
           cloudCfgPromise = null;
           location.reload();
-        }, '断开');
+        }, '恢复默认');
       };
       return;
     }

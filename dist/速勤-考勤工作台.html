@@ -1271,18 +1271,19 @@ if (!cloudCfgPromise) {
 cloudCfgPromise = new Promise(function (resolve) {
 var saved = cloudConfig();
 if (saved) return resolve(saved);
+var isPages = /\.github\.io$/.test(location.hostname) || location.hostname === 'github.io';
 var finish = function (cfg) {
 if (cfg) saveCloudConfig(cfg);
 resolve(cfg);
 };
-if (location.protocol === 'file:') return finish(DEFAULT_CLOUD);
+if (location.protocol === 'file:') return resolve(null);
+if (isPages) return finish(DEFAULT_CLOUD);
 fetch('/api/config', { cache: 'no-store' })
 .then(function (r) { return r.ok ? r.json() : null; })
 .then(function (j) {
-var cfg = j && j.supabase && j.supabase.url && j.supabase.key ? j.supabase : DEFAULT_CLOUD;
-finish(cfg);
+finish(j && j.supabase && j.supabase.url && j.supabase.key ? j.supabase : null);
 })
-.catch(function () { finish(DEFAULT_CLOUD); });
+.catch(function () { resolve(null); });
 });
 }
 return cloudCfgPromise;
