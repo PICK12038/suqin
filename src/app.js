@@ -391,12 +391,13 @@
     if (!g) return [];
     return g.dates.slice(weekStart(), weekStart() + weekSize());
   }
-  // 周标题按真实日历周计算：本周 = 含今天的那一周，往前往后推算，与日期列从哪天开始无关
+  // 周标题按真实日历周计算：本周 = 含今天的那一周，与日期列从哪天开始无关。
+  // 以「本周周一」为基准做差（两端都是周一，差值是 7 的整数倍），避免今天在周中导致的取整偏差
   function weekTitle(dates) {
     var d0 = dates && dates[0];
     if (!d0) return '本周';
-    var diff = Math.round((C.parseISO(d0.iso) - C.parseISO(C.todayISO())) / 86400000); // 均为当天 12:00
-    var w = Math.round(diff / 7); // 该周周一相对本周周一的周数
+    var diff = Math.round((C.parseISO(d0.iso) - C.parseISO(C.mondayOf(C.todayISO()))) / 86400000); // 均为当天 12:00
+    var w = Math.round(diff / 7); // 该周相对本周的周数
     if (w === 0) return '本周';
     if (w === 1) return '下周';
     if (w === -1) return '上周';

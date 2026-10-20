@@ -1476,8 +1476,8 @@ return g.dates.slice(weekStart(), weekStart() + weekSize());
 function weekTitle(dates) {
 var d0 = dates && dates[0];
 if (!d0) return '本周';
-var diff = Math.round((C.parseISO(d0.iso) - C.parseISO(C.todayISO())) / 86400000); // 均为当天 12:00
-var w = Math.round(diff / 7); // 该周周一相对本周周一的周数
+var diff = Math.round((C.parseISO(d0.iso) - C.parseISO(C.mondayOf(C.todayISO()))) / 86400000); // 均为当天 12:00
+var w = Math.round(diff / 7); // 该周相对本周的周数
 if (w === 0) return '本周';
 if (w === 1) return '下周';
 if (w === -1) return '上周';
