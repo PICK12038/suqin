@@ -1353,6 +1353,7 @@ localStorage.setItem(C.APP.dbKey, json);
 localOK = false;
 }
 if (state.mode === 'cloud') {
+if (state.db.meta && state.db.meta.demo) { setSaveState('saved'); return; }
 cloudFetch('PUT', state.db).then(function (res) {
 if (res.ok) {
 state.lastSaved = Date.now();
@@ -3418,8 +3419,8 @@ if (local0 && local0.classes.length) {
 state.db = local0;
 setTimeout(function () { toast('已把本机数据同步到云端', 'ok', 3000); }, 600);
 } else {
-state.db = C.seedDemo();
-state.db.meta.demo = true;
+state.db = blankDB();
+state.db.meta.demo = false;
 }
 } else {
 state.db = remote.db;
