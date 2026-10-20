@@ -1697,6 +1697,178 @@
     toast('备份已导出', 'ok');
   }
 
+  /* ------- 本周长图（Canvas 手绘，无第三方库） ------- */
+  function exportWeekImage() {
+    var g = curGroup(), c = curClass();
+    if (!g || !g.students.length) return toast('没有可导出的学生', 'warn');
+    var dates = weekDates(), ps = periods();
+    if (!dates.length) return toast('本周没有日期', 'warn');
+
+    // 布局常量
+    var W_NAME = 110, W_SEQ = 46, W_SUM = 118, W_CELL = 52, ROW_H = 40;
+    var HEAD1_H = 44, HEAD2_H = 30, TITLE_H = 86, FOOT_H = 46, PAD = 16;
+    var scale = 2; // 2x 高清
+    var tableW = PAD * 2 + W_SEQ + W_NAME + dates.length * ps.length * W_CELL + W_SUM;
+    var cvs = document.createElement('canvas');
+    cvs.width = tableW * scale;
+    cvs.height = (TITLE_H + HEAD1_H + HEAD2_H + g.students.length * ROW_H + FOOT_H + PAD) * scale;
+    var ctx = cvs.getContext('2d');
+    ctx.scale(scale, scale);
+    ctx.textBaseline = 'middle';
+
+    var INK = '#1f2329', MUTED = '#8a919f', LINE = '#e5e7eb', SOFT = '#f7f8fa', ACCENT = '#4F46E5';
+
+    // 背景
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, tableW, cvs.height / scale);
+
+    // 标题
+    var x0 = PAD;
+    ctx.fillStyle = ACCENT;
+    ctx.beginPath();
+    ctx.roundRect(x0, 18, 34, 34, 8);
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 19px system-ui, "PingFang SC", "Microsoft YaHei"';
+    ctx.textAlign = 'center';
+    ctx.fillText('速', x0 + 17, 36);
+    ctx.textAlign = 'left';
+    ctx.fillStyle = INK;
+    ctx.font = 'bold 19px system-ui, "PingFang SC", "Microsoft YaHei"';
+    ctx.fillText((c ? c.name + ' · ' : '') + g.name + ' · 本周考勤', x0 + 46, 30);
+    ctx.fillStyle = MUTED;
+    ctx.font = '13px system-ui, "PingFang SC", "Microsoft YaHei"';
+    var wkLabel = dates[0].label + ' – ' + dates[dates.length - 1].label;
+    var genLabel = '生成于 ' + new Date().toLocaleDateString('zh-CN', { month: 'long', day: 'numeric' });
+    ctx.fillText(wkLabel + '　·　' + genLabel, x0 + 46, 52);
+
+    var TY = TITLE_H; // 表格起点
+
+    // 表头：第一行日期
+    var colX = function (di, pi) { return PAD + W_SEQ + W_NAME + (di * ps.length + pi) * W_CELL; };
+    var sumX = PAD + W_SEQ + W_NAME + dates.length * ps.length * W_CELL;
+
+    ctx.font = 'bold 13px system-ui, "PingFang SC", "Microsoft YaHei"';
+    ctx.textAlign = 'center';
+    var today = C.todayISO();
+    dates.forEach(function (d, di) {
+      var cx = colX(di, 0) + (ps.length * W_CELL) / 2;
+      var isToday = d.id === today;
+      if (isToday) {
+        ctx.fillStyle = ACCENT;
+        ctx.fillRect(colX(di, 0), TY, ps.length * W_CELL, HEAD1_H + HEAD2_H);
+      }
+      ctx.fillStyle = isToday ? '#ffffff' : INK;
+      ctx.fillText(d.label, cx, TY + 16);
+      ctx.font = (isToday ? '12px' : '12px') + ' system-ui, "PingFang SC", "Microsoft YaHei"';
+      ctx.fillStyle = isToday ? 'rgba(255,255,255,.8)' : MUTED;
+      ctx.fillText(C.weekdayName(d.id), cx, TY + 33);
+      ctx.font = 'bold 13px system-ui, "PingFang SC", "Microsoft YaHei"';
+    });
+
+    // 表头：第二行时段 + 序号/姓名/本周
+    ctx.font = '12px system-ui, "PingFang SC", "Microsoft YaHei"';
+    dates.forEach(function (d, di) {
+      ps.forEach(function (p, pi) {
+        ctx.fillStyle = d.id === today ? 'rgba(255,255,255,.85)' : MUTED;
+        ctx.fillText(p.name, colX(di, pi) + W_CELL / 2, TY + HEAD1_H + 15);
+      });
+    });
+    ctx.fillStyle = INK;
+    ctx.font = 'bold 13px system-ui, "PingFang SC", "Microsoft YaHei"';
+    ctx.textAlign = 'center';
+    ctx.fillText('#', PAD + W_SEQ / 2, TY + 26);
+    ctx.fillText('姓名', PAD + W_SEQ + W_NAME / 2, TY + 26);
+    ctx.fillText('本周', sumX + W_SUM / 2, TY + 26);
+    ctx.textAlign = 'left';
+
+    // 网格线与斑马纹
+    var rowsBottom = TY + HEAD1_H + HEAD2_H + g.students.length * ROW_H;
+    ctx.strokeStyle = LINE;
+    ctx.lineWidth = 1;
+    for (var i = 0; i <= g.students.length; i++) {
+      var y = TY + HEAD1_H + HEAD2_H + i * ROW_H;
+      ctx.beginPath(); ctx.moveTo(PAD, y + .5); ctx.lineTo(sumX + W_SUM, y + .5); ctx.stroke();
+    }
+    g.students.forEach(function (st, r) {
+      if (r % 2 === 1) {
+        ctx.fillStyle = SOFT;
+        ctx.fillRect(PAD, TY + HEAD1_H + HEAD2_H + r * ROW_H, sumX + W_SUM - PAD, ROW_H);
+      }
+    });
+    // 竖线
+    for (var di2 = 0; di2 <= dates.length; di2++) {
+      var vx = colX(di2, 0);
+      ctx.beginPath(); ctx.moveTo(vx + .5, TY); ctx.lineTo(vx + .5, rowsBottom); ctx.stroke();
+    }
+    ctx.beginPath(); ctx.moveTo(sumX + .5, TY); ctx.lineTo(sumX + .5, rowsBottom); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(PAD + .5, TY); ctx.lineTo(PAD + .5, rowsBottom); ctx.stroke();
+    // 表头分隔线
+    ctx.beginPath(); ctx.moveTo(PAD, TY + HEAD1_H + HEAD2_H + .5); ctx.lineTo(sumX + W_SUM, TY + HEAD1_H + HEAD2_H + .5); ctx.stroke();
+
+    // 学生行
+    ctx.font = '13px system-ui, "PingFang SC", "Microsoft YaHei"';
+    g.students.forEach(function (st, r) {
+      var cy = TY + HEAD1_H + HEAD2_H + r * ROW_H + ROW_H / 2;
+      // 序号
+      ctx.fillStyle = MUTED;
+      ctx.textAlign = 'center';
+      ctx.font = '12px system-ui, "PingFang SC", "Microsoft YaHei"';
+      ctx.fillText(String(r + 1), PAD + W_SEQ / 2, cy);
+      // 姓名
+      ctx.fillStyle = INK;
+      ctx.font = 'bold 13px system-ui, "PingFang SC", "Microsoft YaHei"';
+      ctx.textAlign = 'left';
+      var nm = st.name.length > 6 ? st.name.slice(0, 5) + '…' : st.name;
+      ctx.fillText(nm, PAD + W_SEQ + 10, cy);
+      // 单元格
+      ctx.textAlign = 'center';
+      dates.forEach(function (d, di) {
+        ps.forEach(function (p, pi) {
+          var s = C.getStatus(g, st.id, d.id, p.id);
+          if (!s) return;
+          var def = C.STATUS_BY_KEY[s];
+          var cx = colX(di, pi) + W_CELL / 2;
+          // 圆角小标签
+          ctx.fillStyle = def.color;
+          ctx.font = 'bold 12px system-ui, "PingFang SC", "Microsoft YaHei"';
+          var tw = ctx.measureText(def.label).width + 14;
+          ctx.beginPath();
+          ctx.roundRect(cx - tw / 2, cy - 11, tw, 22, 5);
+          ctx.fill();
+          ctx.fillStyle = '#fff';
+          ctx.fillText(def.label, cx, cy + .5);
+        });
+      });
+      // 本周汇总
+      var sum = C.summarize(g, st.id, dates.map(function (d) { return d.id; }), ps);
+      ctx.font = '12px system-ui, "PingFang SC", "Microsoft YaHei"';
+      if (sum.abnormal === 0) {
+        ctx.fillStyle = '#059669';
+        ctx.fillText('★ 全勤', sumX + W_SUM / 2, cy);
+      } else {
+        ctx.fillStyle = sum.worst && sum.worst.sev >= 5 ? '#C2410C' : '#D97706';
+        ctx.fillText(shortSummary(sum.counts), sumX + W_SUM / 2, cy);
+      }
+    });
+    ctx.textAlign = 'left';
+
+    // 页脚
+    ctx.fillStyle = MUTED;
+    ctx.font = '12px system-ui, "PingFang SC", "Microsoft YaHei"';
+    var abn = 0;
+    g.students.forEach(function (st) {
+      var s2 = C.summarize(g, st.id, dates.map(function (d) { return d.id; }), ps);
+      abn += s2.abnormal;
+    });
+    ctx.fillText('共 ' + g.students.length + ' 人 · 本周异常 ' + abn + ' 格 · 数据截至 ' + new Date().toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }), PAD, rowsBottom + 24);
+
+    cvs.toBlob(function (blob) {
+      download('速勤-本周考勤-' + (c ? c.name + '-' : '') + g.name + '-' + stamp() + '.png', blob, 'image/png');
+      toast('本周长图已导出', 'ok');
+    }, 'image/png');
+  }
+
   function exportXLSX(scope) {
     var g = curGroup();
     var sheets = [];
@@ -1770,6 +1942,8 @@
     var g = curGroup(), c = curClass();
     var btn = $('#btnExport');
     var html = '<div class="menu">' +
+      '<button class="menu-item" data-ex="img">📸 生成本周长图（发群用）</button>' +
+      '<div class="menu-sep"></div>' +
       '<button class="menu-item" data-ex="xlsx-group">导出本周 Excel（当前组' + (g ? '：' + esc(g.name) : '') + '）</button>' +
       '<button class="menu-item" data-ex="xlsx-class">导出本周 Excel（全班，每组一个表）</button>' +
       '<button class="menu-item" data-ex="csv">导出本周 CSV（当前组）</button>' +
@@ -1784,7 +1958,8 @@
       b.onclick = function () {
         var a = b.getAttribute('data-ex');
         closePop();
-        if (a === 'xlsx-group') exportXLSX('group');
+        if (a === 'img') exportWeekImage();
+        else if (a === 'xlsx-group') exportXLSX('group');
         else if (a === 'xlsx-class') exportXLSX('class');
         else if (a === 'csv') exportCSV();
         else if (a === 'tsv') copyWeekTSV();
