@@ -259,7 +259,8 @@
     }
 
     if (state.mode === 'cloud') {
-      // 云端模式：本地始终留一份兜底，远端为主
+      // 云端模式：本地始终留一份兜底，远端为主。示例数据绝不上传云端。
+      if (state.db.meta && state.db.meta.demo) { setSaveState('saved'); return; }
       cloudFetch('PUT', state.db).then(function (res) {
         if (res.ok) {
           state.lastSaved = Date.now();
@@ -390,6 +391,17 @@
     if (!g) return [];
     return g.dates.slice(weekStart(), weekStart() + weekSize());
   }
+  // 周标题按真实日历周计算：本周 = 含今天的那一周，往前往后推算，与日期列从哪天开始无关
+  function weekTitle(dates) {
+    var d0 = dates && dates[0];
+    if (!d0) return '本周';
+    var diff = Math.round((C.parseISO(d0.iso) - C.parseISO(C.todayISO())) / 86400000); // 均为当天 12:00
+    var w = Math.round(diff / 7); // 该周周一相对本周周一的周数
+    if (w === 0) return '本周';
+    if (w === 1) return '下周';
+    if (w === -1) return '上周';
+    return w > 0 ? w + ' 周后' : (-w) + ' 周前';
+  }
   function weekDateIds() { return weekDates().map(function (d) { return d.id; }); }
   function allDateIds(g) { return (g || curGroup()).dates.map(function (d) { return d.id; }); }
 
@@ -479,7 +491,7 @@
     var dates = weekDates();
     var total = weekCount();
     if (state.week >= total) state.week = total - 1;
-    $('#weekLabel').textContent = '第 ' + (state.week + 1) + ' 周';
+    $('#weekLabel').textContent = weekTitle(dates);
     $('#weekRange').textContent = dates.length
       ? (dates[0].label + (dates.length > 1 ? ' – ' + dates[dates.length - 1].label : ''))
       : '暂无日期';
@@ -1034,7 +1046,7 @@
     // 默认 4 个组
     for (var i = 1; i <= 4; i++) {
       var g = C.newGroup(i + '组', []);
-      g.dates = C.makeDates(C.mondayOf(C.addDays(C.todayISO(), -28)), 24, weekSize());
+      g.dates = C.makeDates(C.mondayOf(C.todayISO()), 24, weekSize());
       c.groups.push(g);
     }
     state.db.classes.push(c);
@@ -1053,7 +1065,7 @@
     var g = C.newGroup(name.trim(), []);
     var first = c.groups[0];
     g.dates = first && first.dates.length ? first.dates.map(function (d) { return { id: d.id, iso: d.iso, label: d.label, tag: d.tag }; })
-      : C.makeDates(C.mondayOf(C.addDays(C.todayISO(), -28)), 24, weekSize());
+      : C.makeDates(C.mondayOf(C.todayISO()), 24, weekSize());
     c.groups.push(g);
     state.groupId = g.id; state.week = weekOfToday(g);
     save(); renderAll();
@@ -1064,7 +1076,7 @@
    * ------------------------------------------------------------------ */
   function generateDatesDialog() {
     var g = curGroup();
-    var start = g && g.dates.length ? g.dates[0].id : C.mondayOf(C.addDays(C.todayISO(), -28));
+    var start = g && g.dates.length ? g.dates[0].id : C.mondayOf(C.todayISO());
     openModal({
       title: '生成学期日期列',
       sub: '按周生成，默认周一至周六（跳过周日），可随时在表头单独增删。',
@@ -1601,7 +1613,7 @@
           if (exists[n]) return;
           exists[n] = 1; g.students.push(C.newStudent(n)); count++;
         });
-        if (!g.dates.length) g.dates = C.makeDates(C.mondayOf(C.addDays(C.todayISO(), -28)), 24, weekSize());
+        if (!g.dates.length) g.dates = C.makeDates(C.mondayOf(C.todayISO()), 24, weekSize());
       });
       state.classId = cc.id;
       state.groupId = cc.groups[0].id;
@@ -1622,7 +1634,7 @@
       if (exists2[n]) return;
       exists2[n] = 1; g.students.push(C.newStudent(n)); added++;
     });
-    if (!g.dates.length) g.dates = C.makeDates(C.mondayOf(C.addDays(C.todayISO(), -28)), 24, weekSize());
+    if (!g.dates.length) g.dates = C.makeDates(C.mondayOf(C.todayISO()), 24, weekSize());
     state.classId = cc.id; state.groupId = g.id; state.week = weekOfToday(g);
     save(); closeModal(); renderAll();
     toast('已导入 ' + added + ' 名学生' + (added < names.length ? '（跳过 ' + (names.length - added) + ' 个重复）' : ''), 'ok');
@@ -2115,7 +2127,7 @@
     var c = C.newClass('1班');
     for (var i = 1; i <= 4; i++) {
       var g = C.newGroup(i + '组', []);
-      g.dates = C.makeDates(C.mondayOf(C.addDays(C.todayISO(), -28)), 24, db.settings.weekSize);
+      g.dates = C.makeDates(C.mondayOf(C.todayISO()), 24, db.settings.weekSize);
       c.groups.push(g);
     }
     db.classes.push(c);
@@ -2485,14 +2497,14 @@
     if (remote.cloud) {
       state.mode = 'cloud';
       if (!remote.db) {
-        // 云端是空的：如果本机有旧数据就把它推上去，否则用示例
+        // 云端是空的：把本机旧数据推上去。示例数据只在本机试用，绝不上传云端。
         var local0 = loadDB();
         if (local0 && local0.classes.length) {
           state.db = local0;
           setTimeout(function () { toast('已把本机数据同步到云端', 'ok', 3000); }, 600);
         } else {
-          state.db = C.seedDemo();
-          state.db.meta.demo = true;
+          state.db = blankDB();
+          state.db.meta.demo = false;
         }
       } else {
         state.db = remote.db;

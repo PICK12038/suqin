@@ -188,7 +188,7 @@ async function evaluate(c, expression) {
     ok('学生行', base.rows === 8, base.rows);
     ok('单元格', base.cells === 8 * 6 * 3, base.cells + ' (期望 144)');
     ok('日期表头', base.dayHeads === 6, base.dayHeads);
-    ok('周标题', /^第 \d+ 周$/.test(base.week || ''), base.week);
+    ok('周标题', /^(本周|上周|下周|前周|大前周|\d+ 周前|\d+ 周后)$/.test(base.week || ''), base.week);
     ok('已保存', /已保存/.test(base.saved || ''), base.saved);
     ok('localStorage 写入', base.ls === true);
     ok('表格视图可见', base.gridHidden === false);
@@ -274,7 +274,7 @@ async function evaluate(c, expression) {
       document.querySelector('#weekPrev').click();
       return { before, after, cells, back: document.querySelector('#weekLabel').textContent };
     })()`);
-    ok('下一周', weekRes.after !== weekRes.before, weekRes.before + ' → ' + weekRes.after);
+    ok('下一周', weekRes.after === '下周' && weekRes.before === '本周', weekRes.before + ' → ' + weekRes.after);
     ok('切周后表格仍在', weekRes.cells === 144, weekRes.cells);
     ok('上一周回到原处', weekRes.back === weekRes.before);
 
