@@ -552,12 +552,15 @@ return r.map(function (c) { return String(c == null ? '' : c).replace(/[\t\r\n]/
 function groupCSVRows(group, periods, opts) {
 opts = opts || {};
 var rows = [], head = ['序号', '姓名'];
-group.dates.forEach(function (d) {
+var dates = opts.dateIds
+? group.dates.filter(function (d) { return opts.dateIds.indexOf(d.id) >= 0; })
+: group.dates;
+dates.forEach(function (d) {
 periods.forEach(function (p) { head.push(d.label + ' ' + p.name); });
 });
 head.push('汇总');
 rows.push(head);
-var dateIds = group.dates.map(function (d) { return d.id; });
+var dateIds = dates.map(function (d) { return d.id; });
 group.students.forEach(function (st, i) {
 var row = [i + 1, st.name];
 var sum = summarize(group, st.id, dateIds, periods);
@@ -808,11 +811,15 @@ return zipStore(files);
 * 把一组导出为 sheet 定义（两行表头 + 冻结窗格 + 合并日期）
 */
 function groupSheet(group, periods, title) {
+var opts = title && typeof title === 'object' ? title : { title: title };
 var rows = [], merges = [], cols = [5, 12];
+var dates = opts.dateIds
+? group.dates.filter(function (d) { return opts.dateIds.indexOf(d.id) >= 0; })
+: group.dates;
 var head1 = [{ v: '序号', s: 1 }, { v: '姓名', s: 1 }];
 var head2 = [{ v: '', s: 1 }, { v: '', s: 1 }];
 var colIndex = 2;
-group.dates.forEach(function (d) {
+dates.forEach(function (d) {
 var span = periods.length;
 head1.push({ v: d.label + (d.tag ? ' ' + d.tag : ''), s: 1 });
 for (var k = 1; k < span; k++) head1.push({ v: '', s: 1 });
@@ -827,8 +834,8 @@ head1.push({ v: '汇总', s: 1 });
 head2.push({ v: '', s: 1 });
 cols.push(20);
 var topOffset = 0;
-if (title) {
-rows.push([{ v: title, s: 5 }]);
+if (opts.title) {
+rows.push([{ v: opts.title, s: 5 }]);
 rows.push([]);
 topOffset = 2;
 merges = merges.map(function (m) {
@@ -840,11 +847,11 @@ merges.push('A1:' + colName(head1.length - 1) + '1');
 }
 rows.push(head1);
 rows.push(head2);
-var dateIds = group.dates.map(function (d) { return d.id; });
+var dateIds = dates.map(function (d) { return d.id; });
 group.students.forEach(function (st, i) {
 var row = [{ v: i + 1, s: 2, t: 'n' }, { v: st.name, s: 3 }];
 var sum = summarize(group, st.id, dateIds, periods);
-group.dates.forEach(function (d) {
+dates.forEach(function (d) {
 periods.forEach(function (p) {
 var s = getStatus(group, st.id, d.id, p.id);
 var stDef = STATUS_BY_KEY[s];
@@ -2668,9 +2675,12 @@ toast('备份已导出', 'ok');
 function exportXLSX(scope) {
 var g = curGroup();
 var sheets = [];
+var weekIds = weekDateIds(); // 只导本周的日期
+var wk = weekDates();
+var weekTag = wk.length ? (wk[0].label + '-' + wk[wk.length - 1].label) : '';
 if (scope === 'group') {
 if (!g) return;
-var sh = C.groupSheet(g, periods(), (curClass() ? curClass().name + ' · ' : '') + g.name);
+var sh = C.groupSheet(g, periods(), { title: (curClass() ? curClass().name + ' · ' : '') + g.name + (weekTag ? ' · ' + weekTag : ''), dateIds: weekIds });
 sh.name = g.name;
 sheets.push(sh);
 } else {
@@ -2678,7 +2688,7 @@ var c = curClass();
 if (!c) return;
 c.groups.forEach(function (k) {
 if (!k.students.length && !k.dates.length) return;
-var s2 = C.groupSheet(k, periods(), c.name + ' · ' + k.name);
+var s2 = C.groupSheet(k, periods(), { title: c.name + ' · ' + k.name + (weekTag ? ' · ' + weekTag : ''), dateIds: weekIds });
 s2.name = c.name + '-' + k.name;
 sheets.push(s2);
 });
@@ -2686,9 +2696,9 @@ if (!sheets.length) return toast('没有可导出的数据', 'warn');
 }
 try {
 var bytes = C.buildXLSX(sheets);
-download('速勤-' + (scope === 'group' ? (g ? g.name : '') : (curClass() ? curClass().name : '')) + '-' + stamp() + '.xlsx',
+download('速勤-本周考勤-' + (scope === 'group' ? (g ? g.name : '') : (curClass() ? curClass().name : '')) + '-' + stamp() + '.xlsx',
 new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
-toast('已导出 Excel', 'ok');
+toast('已导出本周 Excel', 'ok');
 } catch (e) {
 console.error(e);
 toast('导出失败：' + e.message, 'err');
@@ -2697,9 +2707,9 @@ toast('导出失败：' + e.message, 'err');
 function exportCSV() {
 var g = curGroup();
 if (!g) return;
-var csv = C.toCSV(C.groupCSVRows(g, periods()));
-download('速勤-' + g.name + '-' + stamp() + '.csv', csv, 'text/csv;charset=utf-8');
-toast('已导出 CSV', 'ok');
+var csv = C.toCSV(C.groupCSVRows(g, periods(), { dateIds: weekDateIds() }));
+download('速勤-本周考勤-' + g.name + '-' + stamp() + '.csv', csv, 'text/csv;charset=utf-8');
+toast('已导出本周 CSV', 'ok');
 }
 function copyWeekTSV() {
 var g = curGroup(), dates = weekDates(), ps = periods(), today = C.todayISO();
@@ -2731,9 +2741,9 @@ function openExport() {
 var g = curGroup(), c = curClass();
 var btn = $('#btnExport');
 var html = '<div class="menu">' +
-'<button class="menu-item" data-ex="xlsx-group">导出当前组 Excel' + (g ? '（' + esc(g.name) + '）' : '') + '</button>' +
-'<button class="menu-item" data-ex="xlsx-class">导出全班 Excel（每组一个表）</button>' +
-'<button class="menu-item" data-ex="csv">导出当前组 CSV</button>' +
+'<button class="menu-item" data-ex="xlsx-group">导出本周 Excel（当前组' + (g ? '：' + esc(g.name) : '') + '）</button>' +
+'<button class="menu-item" data-ex="xlsx-class">导出本周 Excel（全班，每组一个表）</button>' +
+'<button class="menu-item" data-ex="csv">导出本周 CSV（当前组）</button>' +
 '<button class="menu-item" data-ex="tsv">复制本周表格（TSV）</button>' +
 '<div class="menu-sep"></div>' +
 '<button class="menu-item" data-ex="backup">备份全部数据（JSON）</button>' +

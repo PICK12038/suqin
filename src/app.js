@@ -1700,9 +1700,12 @@
   function exportXLSX(scope) {
     var g = curGroup();
     var sheets = [];
+    var weekIds = weekDateIds(); // 只导本周的日期
+    var wk = weekDates();
+    var weekTag = wk.length ? (wk[0].label + '-' + wk[wk.length - 1].label) : '';
     if (scope === 'group') {
       if (!g) return;
-      var sh = C.groupSheet(g, periods(), (curClass() ? curClass().name + ' · ' : '') + g.name);
+      var sh = C.groupSheet(g, periods(), { title: (curClass() ? curClass().name + ' · ' : '') + g.name + (weekTag ? ' · ' + weekTag : ''), dateIds: weekIds });
       sh.name = g.name;
       sheets.push(sh);
     } else {
@@ -1710,7 +1713,7 @@
       if (!c) return;
       c.groups.forEach(function (k) {
         if (!k.students.length && !k.dates.length) return;
-        var s2 = C.groupSheet(k, periods(), c.name + ' · ' + k.name);
+        var s2 = C.groupSheet(k, periods(), { title: c.name + ' · ' + k.name + (weekTag ? ' · ' + weekTag : ''), dateIds: weekIds });
         s2.name = c.name + '-' + k.name;
         sheets.push(s2);
       });
@@ -1718,9 +1721,9 @@
     }
     try {
       var bytes = C.buildXLSX(sheets);
-      download('速勤-' + (scope === 'group' ? (g ? g.name : '') : (curClass() ? curClass().name : '')) + '-' + stamp() + '.xlsx',
+      download('速勤-本周考勤-' + (scope === 'group' ? (g ? g.name : '') : (curClass() ? curClass().name : '')) + '-' + stamp() + '.xlsx',
         new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
-      toast('已导出 Excel', 'ok');
+      toast('已导出本周 Excel', 'ok');
     } catch (e) {
       console.error(e);
       toast('导出失败：' + e.message, 'err');
@@ -1730,9 +1733,9 @@
   function exportCSV() {
     var g = curGroup();
     if (!g) return;
-    var csv = C.toCSV(C.groupCSVRows(g, periods()));
-    download('速勤-' + g.name + '-' + stamp() + '.csv', csv, 'text/csv;charset=utf-8');
-    toast('已导出 CSV', 'ok');
+    var csv = C.toCSV(C.groupCSVRows(g, periods(), { dateIds: weekDateIds() }));
+    download('速勤-本周考勤-' + g.name + '-' + stamp() + '.csv', csv, 'text/csv;charset=utf-8');
+    toast('已导出本周 CSV', 'ok');
   }
 
   function copyWeekTSV() {
@@ -1767,9 +1770,9 @@
     var g = curGroup(), c = curClass();
     var btn = $('#btnExport');
     var html = '<div class="menu">' +
-      '<button class="menu-item" data-ex="xlsx-group">导出当前组 Excel' + (g ? '（' + esc(g.name) + '）' : '') + '</button>' +
-      '<button class="menu-item" data-ex="xlsx-class">导出全班 Excel（每组一个表）</button>' +
-      '<button class="menu-item" data-ex="csv">导出当前组 CSV</button>' +
+      '<button class="menu-item" data-ex="xlsx-group">导出本周 Excel（当前组' + (g ? '：' + esc(g.name) : '') + '）</button>' +
+      '<button class="menu-item" data-ex="xlsx-class">导出本周 Excel（全班，每组一个表）</button>' +
+      '<button class="menu-item" data-ex="csv">导出本周 CSV（当前组）</button>' +
       '<button class="menu-item" data-ex="tsv">复制本周表格（TSV）</button>' +
       '<div class="menu-sep"></div>' +
       '<button class="menu-item" data-ex="backup">备份全部数据（JSON）</button>' +

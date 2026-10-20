@@ -397,16 +397,19 @@
     }).join('\n');
   }
 
-  // 生成导出行（单行表头，适合 CSV）
+  // 生成导出行（单行表头，适合 CSV）。opts.dateIds 可指定只导出部分日期（如本周）
   function groupCSVRows(group, periods, opts) {
     opts = opts || {};
     var rows = [], head = ['序号', '姓名'];
-    group.dates.forEach(function (d) {
+    var dates = opts.dateIds
+      ? group.dates.filter(function (d) { return opts.dateIds.indexOf(d.id) >= 0; })
+      : group.dates;
+    dates.forEach(function (d) {
       periods.forEach(function (p) { head.push(d.label + ' ' + p.name); });
     });
     head.push('汇总');
     rows.push(head);
-    var dateIds = group.dates.map(function (d) { return d.id; });
+    var dateIds = dates.map(function (d) { return d.id; });
     group.students.forEach(function (st, i) {
       var row = [i + 1, st.name];
       var sum = summarize(group, st.id, dateIds, periods);
@@ -681,12 +684,16 @@
    * 把一组导出为 sheet 定义（两行表头 + 冻结窗格 + 合并日期）
    */
   function groupSheet(group, periods, title) {
+    var opts = title && typeof title === 'object' ? title : { title: title };
     var rows = [], merges = [], cols = [5, 12];
+    var dates = opts.dateIds
+      ? group.dates.filter(function (d) { return opts.dateIds.indexOf(d.id) >= 0; })
+      : group.dates;
     var head1 = [{ v: '序号', s: 1 }, { v: '姓名', s: 1 }];
     var head2 = [{ v: '', s: 1 }, { v: '', s: 1 }];
     var colIndex = 2;
 
-    group.dates.forEach(function (d) {
+    dates.forEach(function (d) {
       var span = periods.length;
       head1.push({ v: d.label + (d.tag ? ' ' + d.tag : ''), s: 1 });
       for (var k = 1; k < span; k++) head1.push({ v: '', s: 1 });
@@ -702,8 +709,8 @@
     cols.push(20);
 
     var topOffset = 0;
-    if (title) {
-      rows.push([{ v: title, s: 5 }]);
+    if (opts.title) {
+      rows.push([{ v: opts.title, s: 5 }]);
       rows.push([]);
       topOffset = 2;
       merges = merges.map(function (m) {
@@ -716,11 +723,11 @@
     rows.push(head1);
     rows.push(head2);
 
-    var dateIds = group.dates.map(function (d) { return d.id; });
+    var dateIds = dates.map(function (d) { return d.id; });
     group.students.forEach(function (st, i) {
       var row = [{ v: i + 1, s: 2, t: 'n' }, { v: st.name, s: 3 }];
       var sum = summarize(group, st.id, dateIds, periods);
-      group.dates.forEach(function (d) {
+      dates.forEach(function (d) {
         periods.forEach(function (p) {
           var s = getStatus(group, st.id, d.id, p.id);
           var stDef = STATUS_BY_KEY[s];
