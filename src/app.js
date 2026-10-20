@@ -368,6 +368,23 @@
     return Math.max(1, Math.ceil(g.dates.length / weekSize()));
   }
   function weekStart() { return state.week * weekSize(); }
+  // 今天所在（或最接近）的周索引：所有「切班级/小组/导入/重新生成」后都用它定位，
+  // 保证视图永远停在本周，而不是跳回第 1 周
+  function weekOfToday(g) {
+    g = g || curGroup();
+    if (!g || !g.dates.length) return 0;
+    var today = C.todayISO();
+    var ids = g.dates.map(function (d) { return d.id; });
+    var idx = ids.indexOf(today);
+    if (idx >= 0) return Math.floor(idx / weekSize());
+    if (today < ids[0]) return 0;               // 今天早于所有日期 → 第一周
+    var last = 0;
+    for (var i = 0; i < ids.length; i++) {
+      if (ids[i] <= today) last = Math.floor(i / weekSize());
+      else break;
+    }
+    return last;                                 // 今天晚于所有日期 → 最后一周
+  }
   function weekDates() {
     var g = curGroup();
     if (!g) return [];
@@ -1021,7 +1038,7 @@
       c.groups.push(g);
     }
     state.db.classes.push(c);
-    state.classId = c.id; state.groupId = c.groups[0].id; state.week = 0;
+    state.classId = c.id; state.groupId = c.groups[0].id; state.week = weekOfToday(c.groups[0]);
     state.sel = state.anchor = state.active = null;
     save(); renderAll();
     toast('已创建 ' + c.name, 'ok');
@@ -1038,7 +1055,7 @@
     g.dates = first && first.dates.length ? first.dates.map(function (d) { return { id: d.id, iso: d.iso, label: d.label, tag: d.tag }; })
       : C.makeDates(C.mondayOf(C.addDays(C.todayISO(), -28)), 24, weekSize());
     c.groups.push(g);
-    state.groupId = g.id; state.week = 0;
+    state.groupId = g.id; state.week = weekOfToday(g);
     save(); renderAll();
   }
 
@@ -1067,7 +1084,7 @@
           var old = {};
           g2.dates.forEach(function (d) { old[d.id] = d.tag; });
           g2.dates = dates.map(function (d) { return { id: d.id, iso: d.iso, label: d.label, tag: old[d.id] || '' }; });
-          state.week = 0;
+          state.week = weekOfToday();
           save(); closeModal(); renderAll();
           toast('已生成 ' + dates.length + ' 天', 'ok');
         };
@@ -1513,7 +1530,7 @@
             state.db = db;
             state.classId = db.classes[0] && db.classes[0].id;
             state.groupId = db.classes[0] && db.classes[0].groups[0] && db.classes[0].groups[0].id;
-            state.week = 0;
+            state.week = weekOfToday();
             save(); closeModal(); renderAll();
             toast('备份已恢复', 'ok');
           } catch (err) {
@@ -1588,7 +1605,7 @@
       });
       state.classId = cc.id;
       state.groupId = cc.groups[0].id;
-      state.week = 0;
+      state.week = weekOfToday(cc.groups[0]);
       save(); closeModal(); renderAll();
       toast('已导入 ' + blocks.length + ' 个小组', 'ok');
       return;
@@ -1606,7 +1623,7 @@
       exists2[n] = 1; g.students.push(C.newStudent(n)); added++;
     });
     if (!g.dates.length) g.dates = C.makeDates(C.mondayOf(C.addDays(C.todayISO(), -28)), 24, weekSize());
-    state.classId = cc.id; state.groupId = g.id; state.week = 0;
+    state.classId = cc.id; state.groupId = g.id; state.week = weekOfToday(g);
     save(); closeModal(); renderAll();
     toast('已导入 ' + added + ' 名学生' + (added < names.length ? '（跳过 ' + (names.length - added) + ' 个重复）' : ''), 'ok');
   }
@@ -1998,7 +2015,7 @@
           var g = curGroup(), old = {};
           g.dates.forEach(function (d) { old[d.id] = d.tag; });
           g.dates = C.makeDates(s, w, weekSize()).map(function (d) { return { id: d.id, iso: d.iso, label: d.label, tag: old[d.id] || '' }; });
-          state.week = 0;
+          state.week = weekOfToday();
           save(); renderAll(); openSettings();
           toast('已生成 ' + g.dates.length + ' 天', 'ok');
         }, '生成');
@@ -2071,7 +2088,7 @@
               state.db.meta.demo = true;
               state.classId = state.db.classes[0].id;
               state.groupId = state.db.classes[0].groups[0].id;
-              state.week = 0;
+              state.week = weekOfToday();
               save(); renderAll(); closeModal();
               toast('示例数据已载入', 'ok');
             }, '载入');
@@ -2083,7 +2100,7 @@
               state.db = blankDB();
               state.classId = state.db.classes[0].id;
               state.groupId = state.db.classes[0].groups[0].id;
-              state.week = 0;
+              state.week = weekOfToday();
               saveNow(); renderAll(); closeModal();
               toast('已清空');
             }, '清空');
@@ -2206,7 +2223,7 @@
     var g = curGroup();
     if (!g) return;
     var idx = g.students.map(function (s) { return s.id; }).indexOf(sid);
-    state.week = Math.min(state.week, weekCount(g) - 1);
+    state.week = weekOfToday(g);   // 搜索跳转同样停在本周
     state.sel = state.anchor = state.active = null;
     save(); renderAll();
     if (idx < 0) return;
@@ -2388,7 +2405,7 @@
         state.classId = b.getAttribute('data-class');
         var c = curClass();
         state.groupId = c && c.groups[0] ? c.groups[0].id : null;
-        state.week = 0;
+        state.week = weekOfToday();
         state.sel = state.anchor = state.active = null;
         save(); renderAll();
         return;
@@ -2401,7 +2418,7 @@
       if (b) {
         state.groupId = b.getAttribute('data-group');
         var g = curGroup();
-        state.week = Math.min(state.week, weekCount(g) - 1);
+        state.week = weekOfToday(g);
         state.sel = state.anchor = state.active = null;
         save(); renderAll();
         return;
@@ -2432,7 +2449,7 @@
         state.db = blankDB();
         state.classId = state.db.classes[0].id;
         state.groupId = state.db.classes[0].groups[0].id;
-        state.week = 0;
+        state.week = weekOfToday();
         saveNow(); renderAll();
         toast('已清空，先在下方输入学生姓名', 'ok', 3000);
       }, '清空');
@@ -2499,21 +2516,13 @@
     var c0 = state.db.classes[0];
     state.classId = c0.id;
     state.groupId = c0.groups[0] ? c0.groups[0].id : null;
-    state.week = 0;
 
     // 回写有效的班级 / 小组，避免备份里 id 失效时标签高亮错位
     var g0 = curGroup();
     if (g0) { state.classId = curClass().id; state.groupId = g0.id; }
 
-    // 定位到本周
-    if (g0) {
-      var idx = g0.dates.map(function (d) { return d.id; }).indexOf(C.todayISO());
-      if (idx >= 0) state.week = Math.floor(idx / weekSize());
-      else {
-        var upcoming = g0.dates.filter(function (d) { return d.id >= C.todayISO(); })[0];
-        if (upcoming) state.week = Math.floor(g0.dates.indexOf(upcoming) / weekSize());
-      }
-    }
+    // 定位到本周（今天所在周；日期全在未来取第一周，全在过去取最后一周）
+    state.week = weekOfToday();
 
     bindChrome();
     bindSearch();
